@@ -1,11 +1,27 @@
 use std::{fmt, fs};
 use std::fmt::{Display, Formatter};
-use std::time::SystemTime;
+use Direction::{Horizontal, Vertical};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct Location {
     x: i32,
     y: i32,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Range {
+    min: i32,
+    max: i32,
+}
+
+impl Range {
+    fn new(a: i32, b: i32) -> Range {
+        if a <= b {
+            Range { min: a, max: b }
+        } else { ;.l/
+            Range { min: b, max: a }
+        }
+    }
 }
 
 impl Display for Location {
@@ -16,97 +32,131 @@ impl Display for Location {
 
 impl Location {
     const CENTRAL_PORT: Location = Location { x: 0, y: 0 };
-
-    fn add(&self, input: &str) -> Location {
-        let mut chars = input.chars();
-        let direction = chars.next().unwrap();
-        let tail: String = chars.collect();
-        let length: i32 = tail.parse().unwrap();
-        match direction {
-            'U' => Location { y: self.y + length, ..*self },
-            'R' => Location { x: self.x + length, ..*self },
-            'D' => Location { y: self.y - length, ..*self },
-            'L' => Location { x: self.x - length, ..*self },
-            _ => panic!("Could not parse location input: {}", input)
-        }
-    }
 }
 
 struct Wire {
     sections: Vec<Section>
 }
 
-enum Section {
-    Horizontal { x1: i32, x2: i32, y: i32 },
-    Vertical { x: i32, y1: i32, y2: i32 },
+#[derive(PartialEq, Debug)]
+enum Direction {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(PartialEq, Debug)]
+struct Section {
+    start: Location,
+    direction: Direction,
+    size: i32,
+    steps: i32,
+    range: Range,
 }
 
 impl Section {
-    fn new(start: Location, end: Location) -> Section {
-        if start.x == end.x {
-            let x = start.x;
-            let (y1, y2) = if start.y <= end.y { (start.y, end.y) } else { (end.y, start.y) };
-            Section::Vertical { x, y1, y2 }
-        } else if start.y == end.y {
-            let (x1, x2) = if start.x <= end.x { (start.x, end.x) } else { (end.x, start.x) };
-            let y = start.y;
-            Section::Horizontal { x1, x2, y }
+    fn new(start: Location, steps: i32, input: &str) -> Section {
+        let (direction, size) = Section::parse_input(input);
+        let var = match direction {
+            Horizontal => start.x,
+            Vertical => start.y
+        };
+        let range = Range::new(var, var + size);
+        Section { start, direction, size, steps, range }
+    }
+
+    fn end(&self) -> Location {
+        match self.direction {
+            Horizontal => Location { x: self.start.x + self.size, ..self.start },
+            Vertical => Location { y: self.start.y + self.size, ..self.start }
+        }
+    }
+
+    fn parse_input(input: &str) -> (Direction, i32) {
+        let mut chars = input.chars();
+        let d = chars.next().unwrap();
+        let tail: String = chars.collect();
+        let length: i32 = tail.parse().unwrap();
+        match d {
+            'U' => (Vertical, length),
+            'R' => (Horizontal, length),
+            'D' => (Vertical, -length),
+            'L' => (Horizontal, -length),
+            _ => panic!("Could not parse location input: {}", input)
+        }
+    }
+
+    fn intersection(a: &Section, b: &Section) -> Option<Location> {
+        let (horizontal, vertical) = match (&a.direction, &b.direction) {
+            (Horizontal, Vertical) => (a, b),
+            (Vertical, Horizontal) => (b, a),
+            _ => return None
+        };
+        let x = vertical.start.x;
+        let y = horizontal.start.y;
+        if x == 0 && y == 0 { return None; }
+        let Range { min: x1, max: x2 } = horizontal.range;
+        let Range { min: y1, max: y2 } = vertical.range;
+        if x1 <= x && x <= x2 && y1 <= y && y <= y2 {
+            Some(Location { x, y })
         } else {
-            panic!("Cannot create section from {} to {}", start, end)
+            None
         }
     }
 
     fn intersection_distance(a: &Section, b: &Section) -> Option<i32> {
-        match (a, b) {
-            (&Section::Horizontal { x1, x2, y }, &Section::Vertical { x, y1, y2 }) => Section::_intersection_distance(x, x1, x2, y, y1, y2),
-            (&Section::Vertical { x, y1, y2 }, &Section::Horizontal { x1, x2, y }) => Section::_intersection_distance(x, x1, x2, y, y1, y2),
-            _ => None
-        }
+        Section::intersection(a, b).map(|Location { x, y }| {
+            x.abs() + y.abs()
+        })
     }
 
-    fn _intersection_distance(x: i32, x1: i32, x2: i32, y: i32, y1: i32, y2: i32) -> Option<i32> {
-        if x == 0 && y == 0 {
-            None
-        } else if x1 <= x && x <= x2 && y1 <= y && y <= y2 {
-            Some(x.abs() + y.abs())
-        } else {
-            None
-        }
+    fn intersection_steps(a: &Section, b: &Section) -> Option<i32> {
+        Section::intersection(a, b).map(|_| {
+            let dx = (a.start.x - b.start.x).abs();
+            let dy = (a.start.y - b.start.y).abs();
+            a.steps + b.steps + dx + dy
+        })
     }
 }
 
 impl Wire {
     fn from_string(input: &str) -> Wire {
         let sections = input.split(',')
-            .scan(Location::CENTRAL_PORT, |acc, input| {
-                let start = *acc;
-                *acc = acc.add(input);
-                Some(Section::new(start, *acc))
+            .scan((Location::CENTRAL_PORT, 0), |(location, steps), input| {
+                let new = Section::new(*location, *steps, input);
+                *location = new.end();
+                *steps += new.size.abs();
+                Some(new)
             })
             .collect();
         Wire { sections }
     }
 
     fn intersection_distance(a: &Wire, b: &Wire) -> Option<i32> {
-          a.sections.iter()
+        Wire::min_by(a,b,Section::intersection_distance)
+    }
+
+    fn intersection_steps(a: &Wire, b: &Wire) -> Option<i32> {
+        Wire::min_by(a,b,Section::intersection_steps)
+    }
+
+    fn min_by(a: &Wire, b: &Wire, check: fn(&Section, &Section) -> Option<i32>)-> Option<i32> {
+        a.sections.iter()
             .flat_map(|s1| {
                 b.sections.iter()
-                    .flat_map(|s2| { Section::intersection_distance(s1, s2) })
+                    .flat_map(|s2| {
+                        check(s1, s2)
+                    })
                     .min()
             }).min()
     }
 }
 
 fn main() {
-    let now = SystemTime::now();
     let wires = parse_input();
     let w1 = &wires[0];
     let w2 = &wires[1];
-    for _ in 1..1000 {
-        Wire::intersection_distance(w1, w2).unwrap();
-    }
     println!("Answer 1 = {}", Wire::intersection_distance(w1, w2).unwrap());
-    println!("{}", now.elapsed().unwrap().as_millis());
+    println!("Answer 2 = {}", Wire::intersection_steps(w1, w2).unwrap());
 }
 
 fn parse_input() -> Vec<Wire> {
@@ -119,6 +169,19 @@ fn parse_input() -> Vec<Wire> {
 #[cfg(test)]
 mod tests {
     use crate::*;
+
+    #[test]
+    fn new_section() {
+        let start = Location { x: 5, y: 7 };
+        let section = Section::new(start, 10, "R75");
+        assert_eq!(section, Section {
+            start,
+            direction: Horizontal,
+            size: 75,
+            steps: 10,
+            range: Range { min: 5, max: 80 },
+        });
+    }
 
     #[test]
     fn example_1() {
