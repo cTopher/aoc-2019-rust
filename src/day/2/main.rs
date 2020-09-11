@@ -88,7 +88,7 @@ impl IndexMut<usize> for IntcodeProgram {
 }
 
 fn main() {
-    let mut program = IntcodeProgram::new(parse_line("src/day/2/input.txt").trim());
+    let mut program = IntcodeProgram::new(parse_line("src/day/2/input.txt.txt").trim());
     part_1(&mut program);
     part_2(&mut program);
 }

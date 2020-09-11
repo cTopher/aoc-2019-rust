@@ -10,13 +10,13 @@ fn main() {
 }
 
 fn part_1() -> u32 {
-    parse_lines("src/day/1/input.txt")
+    parse_lines("src/day/1/input.txt.txt")
         .map(calculate_direct_fuel)
         .sum()
 }
 
 fn part_2() -> u32 {
-    parse_lines("src/day/1/input.txt")
+    parse_lines("src/day/1/input.txt.txt")
         .map(calculate_total_fuel)
         .sum()
 }
