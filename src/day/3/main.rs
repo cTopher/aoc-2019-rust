@@ -18,7 +18,7 @@ impl Range {
     fn new(a: i32, b: i32) -> Range {
         if a <= b {
             Range { min: a, max: b }
-        } else { ;.l/
+        } else {
             Range { min: b, max: a }
         }
     }
